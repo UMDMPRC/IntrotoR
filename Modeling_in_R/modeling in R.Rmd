@@ -1,0 +1,117 @@
+---
+title: "Modeling in R"
+author: "Heide Jackson"
+date: "2/18/2020"
+output: word_document
+---
+## Loading in Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library("TraMineR")
+library("kableExtra")
+library("gapminder")
+library("survey")
+library("nnet")
+library("plm")
+library("MASS")
+library("lavaan")
+library("nlme")
+library("survival")
+library("multistate")
+library("spgwr")
+# install.packages("spgwr")
+# install.packages("multistate")
+# install.packages("survival")
+# install.packages("nlme")
+# install.packages("polr")
+# install.packages("plm")
+# install.packages("nnet")
+# install.packages("survey")
+# install.packages("TraMineR")
+# install.packages("kableExtra")
+# install.packages("gapminder")
+```
+
+## Modeling in R
+Today we are going to be talking about running various statistical models in R.  You may notice, this document looks a little bit different from the R scripts we have previously been running.  This is an Rmarkdown file that allows us to write documents, run analyses and show output in an integrated system.  The gray blocks prefaced by "```" are sections of R code that can be run.  Within the brackets, we set various options for the block of code.  First, we set up a name and then can have options like include or echo.  If include=TRUE, the Rmarkdown file will show the output from that block of code.  If echo=TRUE, the rmarkdown document will show the R code run in additon to the output.
+```{r summary, include=TRUE, echo=TRUE}
+summary(gapminder)
+```
+## Linear Regression
+
+I want to spend a bit of time talking about linear regression in R as I feel like a lot of statistical analysis uses regression as its foundation.  One of the things I like to do is start by writing out the series of relationships I want to model.
+```{r models, include=TRUE, echo=TRUE}
+m1<-lifeExp~year
+m2<-lifeExp~year+continent
+m3<-lifeExp~year+as.factor(continent)
+m4<-lifeExp~year*as.factor(continent)
+m5<-lifeExp~year:as.factor(continent)
+m6<-lifeExp~as.factor(year)*continent
+```
+Note that R will let us define these models without running them.  This comes in handy if we are thinking that different parametric assumptions might better fit this data.  It's a little silly under this example but these kinds of questions come up a lot in survival analyses or for modeling highly non-normal data.  For now, we'll start by just running these models specified assuming a linear specification holds.
+
+We'll see that there are two equivalent ways to do this.  I slightly prefer using the glm function because it provides more flexibility for switching between different kinds of models without changing functions
+```{r linear, include=FALSE, echo=FALSE}
+m1_r.a<- lm(m1, data=gapminder)
+m1_r.b<- glm(m1, family="gaussian", data=gapminder)
+identical(m1_r.a$coef, m1_r.b$coef)
+glm(m2, family="gaussian", data=gapminder)
+glm(m3, family="gaussian", data=gapminder)
+glm(m4, family="gaussian", data=gapminder)
+glm(m5, family="gaussian", data=gapminder)
+glm(m6, family="gaussian", data=gapminder, subset=year>1990)
+```
+
+## Basic Modeling Syntax to Know.  
+
+There are three general ways to specify an interaction.  You can create an object that is the product of the two variables you want to interact, you can specify a full interaction by indicating a star in your models or you can regress just the interaction with the ':' term.  The latter two techniques are illustrated in models 4 and 5 written above.  In most models, you'll want to look at the main effect of variables and their interaction term, so I like using '*' to specify my interactions. 
+
+Like interactions which can be specified either within the data or within the model, you can specify categorical variables and subset data either when specifying the initial data set or in the model step.  
+
+When you do this is somewhat a matter of preference.  If I think I'll use a specification multiple times, I'll usually make the change on the data side.  If I'm still testing, I might just make the change on the model side.
+
+## Extracting Relevant Characteristics from the Models
+So now we've run a series of models testing the relationship between life expectancy and year with various adjustments for continent.  How should we interpret results?  First, as we've seen previously, results are only saved if we saved the results of the function to an object.  In the code above, we thus only have two models available to analyze, m1_r.a and m1_r.b.This goes back to the logic we discussed in earlier sections, if you can see the results, the object probably isn't being saved.  If no results are seen, they are probably being saved to the object.  However, going back to the question at hand, how do we get reasonable regression results out of these fitted models.  As is often the case, there are many ways to do this in R.
+```{r results, include=FALSE, echo=TRUE}
+summary(m1_r.a)
+names(m1_r.a)
+names(m1_r.b)
+coef<-m1_r.b$coefficients
+b<-summary(m1_r.b)$coefficients
+c<- summary(m1_r.b)
+plot(m1_r.b)
+
+```
+The above code shows some of the ways that we can get results following a regression model.  Many functions, including lm and glm, show clean results with use of the summary function.  It's important to note that the object we created containing the regression results has embedded in it various terms that might be useful for our results and diagnostic purposes that may get lost if we were to just save the summary of the model.  Additionally,  some functions enable you to use plot on the saved model data to run additional diagnostic testing.  The exact objects saved will depend on the function being called.
+
+## Various Non-Linear Models
+Below I also want to show some code for various non-linear models in R.  One of the things you will notice is that the general syntax for defining a model is very similar across models.  We start by defining some relationship to be modelled and specify the data and any additional constraints to be considered.
+```{r datamodifications, include=TRUE, echo=TRUE}
+gapminder2<-gapminder
+gapminder2$yeardummy<-factor(gapminder2$year)
+gapminder2$longevity<-ifelse(gapminder2$lifeExp>70, 1,0)
+gapminder2$longcat<-ifelse(gapminder2$lifeExp>=70 & gapminder2$lifeExp>50, 3,2)
+gapminder2$longcat[gapminder2$lifeExp<70]<-ifelse(gapminder2$lifeExp[gapminder2$lifeExp<70]>50 & gapminder2$lifeExp[gapminder2$lifeExp<70]<70, 2,1)
+gapminder2$longcat<-as.factor(gapminder2$longcat)
+Europe<-subset(gapminder2, continent=="Europe")
+glm(longevity~year, family=binomial(link="logit"), data=gapminder2)
+
+glm(longevity~year,family=binomial(link="probit"), data=gapminder2)
+
+multinom(longcat~year, data=gapminder2)
+polr(longcat~year, data=gapminder2)
+
+```
+
+## A Quick Note About Survey Weights
+
+The various model functions we've discussed so far weren't necessarily meant for complex surveys with strata or cluster type sampling.  Most functions have a weight option that gives valid inferences with a person weight adjustment; however, standard errors may be incorrect if only person weights are accounted for.  The survey package adjusts for aspects of the survey design when calculating standard errors; however, be warned that the package may not perform exactly as expected and may not yield valid estimates for all types of weights or all types of models of interest.
+
+## Vignettes
+
+So far we've talked about running some pretty general linear and non-linear models, but R supports lots of complex models and analyses.  In addition to the documentation, many of these packages support the use of vignettes to give examples of data and models that can be run under the packages functions.  
+
+```{r vignettes, include=TRUE, echo=TRUE}
+vignette("timedep", package="survival")
+browseVignettes(package="TraMineR")
+```
